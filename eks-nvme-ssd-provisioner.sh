@@ -12,6 +12,9 @@ FILESYSTEM_BLOCK_SIZE=${FILESYSTEM_BLOCK_SIZE:-4096}  # Bytes
 STRIDE=$((RAID_CHUNK_SIZE * 1024 / FILESYSTEM_BLOCK_SIZE))
 STRIPE_WIDTH=$((SSD_NVME_DEVICE_COUNT * STRIDE))
 
+mkdir -p /nvme/disk
+mkdir -p /nvme/local-path-provisioner
+
 # Checking if provisioning already happend
 if [[ "$(ls -A /pv-disks)" ]]
 then
@@ -38,10 +41,12 @@ then
   if mount | grep "$DEVICE" > /dev/null; then
     echo "device $DEVICE appears to be mounted already"
   else
-    mount -o defaults,noatime,discard,nobarrier --uuid "$UUID" "/pv-disks/$UUID"
+    mount -o defaults,noatime,discard --uuid "$UUID" "/pv-disks/$UUID"
   fi
   ln -s "/pv-disks/$UUID" /nvme/disk || true
   echo "Device $DEVICE has been mounted to /pv-disks/$UUID"
+  mount -o bind "/pv-disks/$UUID" /nvme/local-path-provisioner
+  echo "Device $DEVICE has been bind to /nvme/local-path-provisioner"
   while sleep 3600; do :; done
 fi
 
@@ -71,9 +76,13 @@ esac
 
 UUID=$(blkid -s UUID -o value "$DEVICE")
 mkdir -p "/pv-disks/$UUID"
-mount -o defaults,noatime,discard,nobarrier --uuid "$UUID" "/pv-disks/$UUID"
+mount -o defaults,noatime,discard --uuid "$UUID" "/pv-disks/$UUID"
+rm -Rf "/pv-disks/$UUID/lost+found"
+echo "Remove lost+found directory"
 ln -s "/pv-disks/$UUID" /nvme/disk
 echo "Device $DEVICE has been mounted to /pv-disks/$UUID"
+mount -o bind "/pv-disks/$UUID" /nvme/local-path-provisioner
+echo "Device $DEVICE has been bind to /nvme/local-path-provisioner"
 echo "NVMe SSD provisioning is done and I will go to sleep now"
 
 while sleep 3600; do :; done
